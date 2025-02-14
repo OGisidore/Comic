@@ -1,0 +1,71 @@
+# Environnement virtuel
+env/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Fichiers de configuration
+*.sqlite3
+*.db
+
+# Dossier des migrations
+*/migrations/*
+
+# Fichiers de logs
+*.log
+
+# Fichiers de configuration d'IDE
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Fichiers de cache
+*.cache
+
+# Fichiers d'archives
+*.zip
+*.tar.gz
+
+# fichiers de test
+*.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+
+# Secrets
+*.env
+
+# Fichiers temporaires
+*.tmp
+*.bak
+
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+build
+node_modules
