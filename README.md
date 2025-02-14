@@ -44,8 +44,8 @@ comics_project/ │── comics_app/ │ ├── models.py # Data models (Cha
 ### 2️⃣ Installation
 
 ```bash
-git clone https://github.com/your-repo/comics-api.git
-cd comics-api
+git clone https://github.com/ComicMe/Comic.git
+cd comic
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
