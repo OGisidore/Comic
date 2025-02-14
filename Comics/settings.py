@@ -203,7 +203,7 @@ STATIC_URL = '/static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_URL = '/generated_images/'  # URL accessible publiquement
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media/generated_images')
+MEDIA_ROOT = os.path.join(BASE_DIR, "media" ,'generated_images')
 
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')

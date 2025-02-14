@@ -1,3 +1,4 @@
+from uuid import UUID
 from django.shortcuts import render
 
 # Create your views here.
@@ -14,7 +15,7 @@ import datetime
 import io
 import os
 from PIL import Image
-from .ia import encode_image, generate_text_from_images, generate_image_from_text, generate_story_from_images , generate_question_from_text, get_text_from_audio, veri_response # Ajout des imports
+from .ia import encode_image, generate_storyfromdee, generate_image # Ajout des imports
 
 
 # Placeholder function: Split the story into segments for each panel
@@ -37,7 +38,7 @@ def split_story_into_segments(story: str, total_panels: int) -> list:
         segments.append(segment)
     return segments
 
-def convert_image_to_base64(image_field):
+def convert_image_to_base64(img_path):
     """
     Convert an ImageField file to a base64 encoded string.
     You should implement error handling and file reading logic as required.
@@ -81,10 +82,10 @@ class CreateCharacter(APIView):
                 for chunk in image1.chunks():
                     f.write(chunk)
        
-                prompt = "Generate a high-quality manga-style illustration of a character based on the provided reference image. The character should maintain their defining facial features and overall appearance but be transformed into a manga/anime style. Their expression, pose, and background should reflect their personality, which is described as [insert personality traits, e.g., 'confident and determined' or 'shy and kind'].The art style should resemble classic manga aesthetics, with clean line work, expressive eyes, and dynamic shading. Ensure the background complements the character’s personality—[describe an appropriate setting, e.g., 'a futuristic cyber city for a tech-savvy genius' or 'a peaceful cherry blossom garden for a calm and gentle soul']. The final image should feel like an authentic manga character portrait with vibrant details and an engaging atmosphere."
+                prompt = f"Generate a high-quality manga-style illustration of a character based on the provided reference image. The character should maintain their defining facial features and overall appearance but be transformed into a manga/anime style. Their expression, pose, and background should reflect their personality, which is described as [insert personality traits, e.g., 'confident and determined' or 'shy and kind'] or this details {details}.The art style should resemble classic manga aesthetics, with clean line work, expressive eyes, and dynamic shading. Ensure the background complements the character’s personality—[describe an appropriate setting, e.g., 'a futuristic cyber city for a tech-savvy genius' or 'a peaceful cherry blossom garden for a calm and gentle soul'] or this details {details}. The final image should feel like an authentic manga character portrait with vibrant details and an engaging atmosphere."
             base64_image_1 = encode_image(image1_path)
             # generated_text = generate_text_from_images(base64_image_1, base64_image_2, prompt)
-            generated_image_bytes = generate_image_from_text(prompt )
+            generated_image_bytes = generate_image(prompt,base64_image_1  )
 
  
             timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -100,7 +101,7 @@ class CreateCharacter(APIView):
             character = Character.objects.create(
                 generated_image=generated_image_name,
                 referenceImage=image1_path,
-                user=request.user.username
+                # userId=request.user.username
             )
 
             serializer = CharacterSerializer(character)
@@ -185,101 +186,114 @@ class CreateComics(APIView):
     8. Return the created comic data.
     """
 
+
     def post(self, request, *args, **kwargs):
-        data = request.data
-
-        # Validate required fields: title, genre, and characters must be provided.
-        if not data.get('title') or not data.get('genre') or not data.get('characters'):
-            return Response(
-                {'error': 'characters, genre, and title are required.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Retrieve Character objects based on a list of character IDs provided in the request.
-        # Assuming 'characters' is a list of UUIDs.
         try:
-            characters = Character.objects.filter(id__in=data.get('characters'))
-            if not characters.exists():
+            data = request.data
+            print("Data received:", data)
+
+            # Validate required fields: title, genre, and characters must be provided.
+            if not data.get('title') or not data.get('genre') or not data.get('characters'):
                 return Response(
-                    {'error': 'No matching characters found.'},
+                    {'error': 'characters, genre, and title are required.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            print("pass 1")
+
+            try:
+                character_ids = [UUID(char_id.strip()) for char_id in data.get('characters')]
+            except ValueError as e:
+                return Response({'error': f"Invalid UUID format: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                characters = Character.objects.filter(id__in=character_ids)
+                if not characters.exists():
+                    return Response(
+                        {'error': 'No matching characters found.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            except Exception as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            print("pass 2")
+
+            # Récupération des autres paramètres du comic
+            title = data.get('title')
+            genre = data.get('genre')
+            nbPages = data.get('nbPages', 1)  # Default to 1 if not provided.
+            nbPanelsPerPage = data.get('nbPanelsPerPage', 4)  # Default to 4 if not provided.
+            user_id = data.get('userId', 'default_user')
+
+            # Construction du prompt pour générer l'histoire
+            prompt = (
+                f"Generate a comic story titled '{title}' in the '{genre}' genre. "
+                f"The comic should have {nbPages} pages with {nbPanelsPerPage} panels per page. "
+                "Each panel should contain at most 3 short sentences."
+            )
+
+            # Génération de l'histoire
+            story = generate_storyfromdee(prompt)
+            print("pass 3")
+
+            # Calcul du nombre total de panneaux et découpage de l'histoire en segments
+            total_panels = int(nbPages) * int(nbPanelsPerPage)
+            story_segments = split_story_into_segments(story, total_panels)
+            print("pass 4")
+
+            # Création des panneaux pour le comic
+            panels = []
+            for index, segment in enumerate(story_segments):
+                # Conversion des images des personnages en base64
+                character_images_base64 = [
+                    convert_image_to_base64(character.generated_image) for character in characters
+                ]
+                # Construction du prompt pour générer l'image du panneau
+                panel_image_prompt = (
+                    f"Generate a scene image for the following story segment: '{segment}'. "
+                    f"Include character visuals: {character_images_base64}."
+                )
+                # Génération de l'image du panneau
+                panel_image = generate_image(panel_image_prompt)
+                print("pass 5")
+
+                timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                panel_image_name = f"panel_image_{timestamp}.png"
+                panel_image_path = os.path.join(settings.MEDIA_ROOT, panel_image_name)
+
+                # Sauvegarde de l'image générée sur le disque
+                with open(panel_image_path, 'wb') as f:
+                    f.write(panel_image)
+
+                # Création de l'instance Panel
+                panel = Panel.objects.create(
+                    text=segment,
+                    scenesImage=panel_image_name,  # Assurez-vous que ce champ correspond à votre modèle
+                    order=index + 1,
+                    userId=user_id,
+                    comic=None  # Sera mis à jour après la création du Comic
+                )
+                panels.append(panel)
+
+            # Création de l'instance Comic
+            comic = Comic.objects.create(
+                title=title,
+                nbPages=nbPages,
+                nbPanelsPerPage=nbPanelsPerPage,
+                userId=user_id
+            )
+
+            # Association des panneaux au comic
+            for panel in panels:
+                panel.comic = comic
+                panel.save()
+
+            # Association des personnages au comic (relation Many-to-Many)
+            comic.characters.set(characters)
+            comic.save()
+
+            # Sérialisation et renvoi de la réponse
+            response_data = ComicSerializer(comic).data
+            return Response(response_data, status=status.HTTP_200_OK)
+
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Retrieve additional comic parameters from the request data.
-        title = data.get('title')
-        genre = data.get('genre')
-        nbPages = data.get('nbPages', 1)  # Default to 1 if not provided.
-        nbPanelsPerPage = data.get('nbPanelsPerPage', 4)  # Default to 1 if not provided.
-        user_id = data.get('userId', 'default_user')
-
-        # Construct a prompt to generate the story.
-        # The prompt should include title, genre, number of pages, and panels per page.
-        prompt = (
-            f"Generate a comic story titled '{title}' in the '{genre}' genre. "
-            f"The comic should have {nbPages} pages with {nbPanelsPerPage} panels per page. "
-            "Each panel should contain at most 3 short sentences."
-        )
-
-        # Generate the story using an external function.
-        story = generate_story(prompt)
-
-        # Calculate total number of panels.
-        total_panels = int(nbPages) * int(nbPanelsPerPage)
-        # Split the generated story into segments corresponding to each panel.
-        story_segments = split_story_into_segments(story, total_panels)
-
-        # Create panels for the comic.
-        panels = []
-        for index, segment in enumerate(story_segments):
-            # Convert associated character images to base64 strings.
-            character_images_base64 = [
-                convert_image_to_base64(character.generated_image) for character in characters
-            ]
-            # Construct a prompt to generate the panel image using the story segment and character visuals.
-            panel_image_prompt = (
-                f"Generate a scene image for the following story segment: '{segment}'. "
-                f"Include character visuals: {character_images_base64}."
-            )
-            # Generate the panel image.
-            panel_image = generate_panel_image(panel_image_prompt)
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-            panel_image_name = f"panel_image_{timestamp}.png"
-            panel_image_path = os.path.join(settings.MEDIA_ROOT, panel_image_name)
-
-        with open(panel_image_path, 'wb') as f:
-            f.write(generated_image_bytes)
-
-
-            # Create a Panel instance. Note that we temporarily set comic to None; we will assign it later.
-            panel = Panel.objects.create(
-                text=segment,
-                scenesImage=panel_image_name,  # Adjust this field if you need to handle file saving.
-                order=index + 1,
-                userId=user_id,
-                comic=None  # Will be updated after creating the Comic.
-            )
-            panels.append(panel)
-
-        # Create the Comic instance.
-        comic = Comic.objects.create(
-            title=title,
-            nbPages=nbPages,
-            nbPanelsPerPage=nbPanelsPerPage,
-            userId=user_id
-        )
-
-        # Associate each Panel with the created Comic.
-        for panel in panels:
-            panel.comic = comic
-            panel.save()
-
-        # Associate the Character objects with the Comic (Many-to-Many relation).
-        comic.characters.set(characters)
-        comic.save()
-
-        # Serialize the Comic instance to return as a response.
-        response_data = ComicSerializer(comic).data
-
-        return Response(response_data, status=status.HTTP_200_OK)
+            # Capture toute erreur inattendue
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
