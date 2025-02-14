@@ -7,6 +7,8 @@ from Comics import settings
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from .models import Character, Comic, Panel
+from .serializer import CharacterSerializer , ComicSerializer
 from django.core.files.base import ContentFile
 import datetime 
 import io
