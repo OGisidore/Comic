@@ -21,7 +21,11 @@ class Comic(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Un tableau de Character
     genre = models.CharField(max_length=500, blank=True)
-    characters = models.ManyToManyField(Character, related_name="comics", blank=True)
+    theme = models.CharField(max_length=500, blank=True)
+    author = models.CharField(max_length=500, blank=True)
+    storytext = models.CharField( blank=True)
+    storydetails = models.CharField(max_length=500, blank=True)
+    characters = models.ImageField()
     title = models.CharField(max_length=500, blank=True)  # Utilisation d'un CharField pour limiter la longueur
     nbPages = models.IntegerField(blank=True, null=True)  # Corrigé
     nbPanelsPerPage = models.IntegerField(blank=True, null=True)  # Corrigé et renommé pour la cohérence
@@ -35,8 +39,6 @@ class Comic(models.Model):
 
 class Panel(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    # Un tableau de Character
-    characters = models.ManyToManyField(Character, related_name='panels', blank=True)
     text = models.TextField(blank=True)
     scenesImage = models.ImageField(blank=True)  # Corrigé
     order = models.IntegerField(blank=True, null=True)  # Corrigé

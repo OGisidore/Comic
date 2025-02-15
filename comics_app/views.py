@@ -38,13 +38,20 @@ def split_story_into_segments(story: str, total_panels: int) -> list:
         segments.append(segment)
     return segments
 
-def convert_image_to_base64(img_path):
+def convert_image_to_base64(img_file):
     """
     Convert an ImageField file to a base64 encoded string.
     You should implement error handling and file reading logic as required.
     """
     try:
-            return encode_image(img_path)
+         # Sauvegarde temporaire des images pour l'encodage
+        image1_path = f"temp_{img_file.name}"
+         # Enregistrer temporairement les images
+        with open(image1_path, 'wb') as f:
+            for chunk in img_file.chunks():
+                f.write(chunk)
+       
+        return encode_image(image1_path)
     except Exception as e:
         return ""
 
@@ -193,58 +200,65 @@ class CreateComics(APIView):
             print("Data received:", data)
 
             # Validate required fields: title, genre, and characters must be provided.
-            if not data.get('title') or not data.get('genre') or not data.get('characters'):
+            if not data.get('title') or not data.get('genre'):
                 return Response(
-                    {'error': 'characters, genre, and title are required.'},
+                    {'error': 'title and genre are required.'},
+                    status=status.HTTP_400_BAD_REQUEST
+            )
+            characters = request.FILES.getlist('characters')
+            if not characters:
+                return Response(
+                    {'error': 'At least one character image is required.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            print("pass 1")
+            print("Pass 1: Images received.")
 
-            try:
-                character_ids = [UUID(char_id.strip()) for char_id in data.get('characters')]
-            except ValueError as e:
-                return Response({'error': f"Invalid UUID format: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-
-            try:
-                characters = Character.objects.filter(id__in=character_ids)
-                if not characters.exists():
-                    return Response(
-                        {'error': 'No matching characters found.'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-            except Exception as e:
-                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-            print("pass 2")
+          
 
             # Récupération des autres paramètres du comic
             title = data.get('title')
+            author = data.get('author')
+            storydetails = data.get('storydetails')
+            theme=data.get("theme")
             genre = data.get('genre')
-            nbPages = data.get('nbPages', 1)  # Default to 1 if not provided.
-            nbPanelsPerPage = data.get('nbPanelsPerPage', 4)  # Default to 4 if not provided.
+            nbPages = int(data.get('nbPages', 1))
+            nbPanelsPerPage = int(data.get('nbPanelsPerPage', 4))
             user_id = data.get('userId', 'default_user')
 
             # Construction du prompt pour générer l'histoire
             prompt = (
-                f"Generate a comic story titled '{title}' in the '{genre}' genre. "
+                f"Generate a comic story titled '{title}' in the '{genre}' genre. and have content relate to {storydetails} "
                 f"The comic should have {nbPages} pages with {nbPanelsPerPage} panels per page. "
                 "Each panel should contain at most 3 short sentences."
             )
 
             # Génération de l'histoire
             story = generate_storyfromdee(prompt)
-            print("pass 3")
+            print("Pass 3: Story generated.")
 
             # Calcul du nombre total de panneaux et découpage de l'histoire en segments
             total_panels = int(nbPages) * int(nbPanelsPerPage)
             story_segments = split_story_into_segments(story, total_panels)
-            print("pass 4")
-
+            print(len(story_segments))
+            print("Pass 4: Story split into segments.")
+            # Création de l'instance Comic
+            comic = Comic.objects.create(
+                title=title,
+                storydetails=storydetails,
+                storytext=story,
+                author = author if author else "",
+                theme = theme if theme else "",
+                genre = genre if genre else "",
+                nbPages=nbPages,
+                nbPanelsPerPage=nbPanelsPerPage,
+            )
+            print("Pass 5: Comic created.")
             # Création des panneaux pour le comic
             panels = []
             for index, segment in enumerate(story_segments):
                 # Conversion des images des personnages en base64
                 character_images_base64 = [
-                    convert_image_to_base64(character.generated_image) for character in characters
+                    convert_image_to_base64(image) for image in characters
                 ]
                 # Construction du prompt pour générer l'image du panneau
                 panel_image_prompt = (
@@ -253,7 +267,7 @@ class CreateComics(APIView):
                 )
                 # Génération de l'image du panneau
                 panel_image = generate_image(panel_image_prompt)
-                print("pass 5")
+                print("Pass 5: Panel image generated.")
 
                 timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
                 panel_image_name = f"panel_image_{timestamp}.png"
@@ -269,25 +283,19 @@ class CreateComics(APIView):
                     scenesImage=panel_image_name,  # Assurez-vous que ce champ correspond à votre modèle
                     order=index + 1,
                     userId=user_id,
-                    comic=None  # Sera mis à jour après la création du Comic
+                    comic=comic  # Sera mis à jour après la création du Comic
                 )
                 panels.append(panel)
 
-            # Création de l'instance Comic
-            comic = Comic.objects.create(
-                title=title,
-                nbPages=nbPages,
-                nbPanelsPerPage=nbPanelsPerPage,
-                userId=user_id
-            )
+           
 
             # Association des panneaux au comic
             for panel in panels:
-                panel.comic = comic
+                # panel.comic = comic
                 panel.save()
 
             # Association des personnages au comic (relation Many-to-Many)
-            comic.characters.set(characters)
+            # comic.characters.set(characters)
             comic.save()
 
             # Sérialisation et renvoi de la réponse

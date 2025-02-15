@@ -15,14 +15,17 @@ dotenv.load_dotenv()
 # OpenAI and HuggingFace API keys
 openai_api_key = os.getenv("OPENAI_API_KEY")
 huggingface_api_key = os.getenv("API_TOKEN")
-deepseek_api_key=os.getenv("DEEPSEEK_API_KEY")
+deepseek_api_key= os.getenv("DEEPSEEK_API_KEY")
 
 # OpenAI and HuggingFace API URLs
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
-DEEPSEEK_API_URL = "https://api.aimlapi.com/v1/chat/completions"
+DEEPSEEK_API_URL = "https://api.aimlapi.com/v1"
 
-client =openai.OpenAI()
+client = openai.OpenAI(
+    base_url=DEEPSEEK_API_URL,
+    api_key=deepseek_api_key
+)
 
 # Set headers for OpenAI API
 openai_headers = {
@@ -31,7 +34,7 @@ openai_headers = {
 }
 
 # Set headers for OpenAI API
-openai_headers = {
+deepseek_headers = {
     "Content-Type": "application/json",
     "Authorization": f"Bearer {deepseek_api_key}"
 }
@@ -65,6 +68,7 @@ def generate_story(text, prompt):
     
     response = requests.post(OPENAI_API_URL, headers=openai_headers, json=payload)
     response_json = response.json()
+    print(response_json)
     
     # Extract the answer from the 'choices' field
     if 'choices' in response_json and len(response_json['choices']) > 0:
@@ -74,27 +78,31 @@ def generate_story(text, prompt):
     
 # deepseek models
 def generate_storyfromdee(prompt):
-    payload = {
-        "model": "deepseek/deepseek-chat",
-        "messages": [
+   
+    model= "deepseek/deepseek-chat"
+    messages= [
+            {
+                "role": "system",
+                "content": "You are a story writer."
+            },
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},                    
-                ]
+                "content": prompt
+                    
             }
-        ],
-        "max_tokens": 300
-    }
+    ]
     
-    response = requests.post(OPENAI_API_URL, headers=openai_headers, json=payload)
-    response_json = response.json()
     
-    # Extract the answer from the 'choices' field
-    if 'choices' in response_json and len(response_json['choices']) > 0:
-        return response_json['choices'][0]['message']['content']
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages
+    )
+    print(response)
+     # Vérification et extraction sécurisée de la réponse
+    if hasattr(response, 'choices') and response.choices:
+        return response.choices[0].message.content
     else:
-        raise Exception("No answer found in the OpenAI response.")
+        raise ValueError("No valid response found in Deepseek output.")
 
 # Function to generate an image based on the PROMPT AND REFERENCE IMAGE using Hugging Face's FLUX model
 def generate_image(text, reference_image_base64=None):
@@ -117,11 +125,11 @@ def generate_image(text, reference_image_base64=None):
 
 
    
-    transcription = client.audio.transcriptions.create(
-        model="whisper-1", 
-        file=audio_file
-    )
-    return transcription.text
+    # transcription = client.audio.transcriptions.create(
+    #     model="whisper-1", 
+    #     file=audio_file
+    # )
+    # return transcription.text
 
 # def get_llm_response(prompt):
 #     response = client.chat.completions.create(
