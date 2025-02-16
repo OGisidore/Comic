@@ -1,45 +1,43 @@
 import base64
-import mimetypes
 import requests
 import openai
 from openai import OpenAI
 import dotenv
 import os
-import json
 import io
-from PIL import Image
+from runware import Runware, IPhotoMaker
+import uuid
+import aiohttp
+
 
 # Load the .env file
 dotenv.load_dotenv()
 
-# OpenAI and HuggingFace API keys
-openai_api_key = os.getenv("OPENAI_API_KEY")
-huggingface_api_key = os.getenv("API_TOKEN")
-deepseek_api_key=os.getenv("DEEPSEEK_API_KEY")
+runware_api_key = os.getenv("API_RUNWARE_TOKEN")
+deepseek_api_key= os.getenv("DEEPSEEK_API_KEY")
 
-# OpenAI and HuggingFace API URLs
-OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
-DEEPSEEK_API_URL = "https://api.aimlapi.com/v1/chat/completions"
 
-client =openai.OpenAI()
+RUNWARE_API_URL = "https://api.runware.ai/v1"
 
+DEEPSEEK_API_URL = "https://api.aimlapi.com/v1"
+
+client = openai.OpenAI(
+    base_url=DEEPSEEK_API_URL,
+    api_key=deepseek_api_key
+)
 # Set headers for OpenAI API
-openai_headers = {
+runware_headers = {
     "Content-Type": "application/json",
-    "Authorization": f"Bearer {openai_api_key}"
+    "Authorization": f"Bearer {runware_api_key}"
 }
 
+
 # Set headers for OpenAI API
-openai_headers = {
+deepseek_headers = {
     "Content-Type": "application/json",
     "Authorization": f"Bearer {deepseek_api_key}"
 }
 
-# Set headers for HuggingFace API
-huggingface_headers = {
-    "Authorization": f"Bearer {huggingface_api_key}"
-}
 
 # Function to encode an image as base64
 def encode_image(image_path):
@@ -47,134 +45,119 @@ def encode_image(image_path):
         return base64.b64encode(image_file.read()).decode('utf-8')
 
 
-def generate_story(text, prompt):
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "text", "story": text}
-                    
-                ]
-            }
-        ],
-        "max_tokens": 300
-    }
-    
-    response = requests.post(OPENAI_API_URL, headers=openai_headers, json=payload)
-    response_json = response.json()
-    
-    # Extract the answer from the 'choices' field
-    if 'choices' in response_json and len(response_json['choices']) > 0:
-        return response_json['choices'][0]['message']['content']
-    else:
-        raise Exception("No answer found in the OpenAI response.")
-    
-# deepseek models
+
+
 def generate_storyfromdee(prompt):
     payload = {
-        "model": "deepseek/deepseek-chat",
+        "model": "deepseek-ai/deepseek-llm-67b-chat",
         "messages": [
             {
+                "role": "system",
+                "content": "You are a story writer."
+            },
+            {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},                    
-                ]
+                "content": prompt
             }
         ],
-        "max_tokens": 300
+        "max_tokens": 150
     }
-    
-    response = requests.post(OPENAI_API_URL, headers=openai_headers, json=payload)
-    response_json = response.json()
-    
-    # Extract the answer from the 'choices' field
-    if 'choices' in response_json and len(response_json['choices']) > 0:
-        return response_json['choices'][0]['message']['content']
-    else:
-        raise Exception("No answer found in the OpenAI response.")
-
-# Function to generate an image based on the PROMPT AND REFERENCE IMAGE using Hugging Face's FLUX model
-def generate_image(text, reference_image_base64=None):
-    payload = {"inputs": text}
-    
-    # If a reference image is provided, include it in the payload
-    if reference_image_base64:
-        payload['reference_image'] = reference_image_base64
 
     try:
-        response = requests.post(HUGGINGFACE_API_URL, headers=huggingface_headers, json=payload)
+        response = requests.post(
+            DEEPSEEK_API_URL + "/chat/completions",
+            headers=deepseek_headers,
+            json=payload,
+            # timeout=30  # Ajout d'un timeout de 30s
+        )
+        response.raise_for_status()  # Déclenche une erreur en cas de réponse HTTP 4xx ou 5xx
+    except requests.exceptions.Timeout:
+        raise Exception("La requête a pris trop de temps. Essayez d'augmenter le timeout ou vérifiez l'API.")
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Erreur lors de la requête à DeepSeek: {e}")
 
-        # Check if the request was successful
-        if response.status_code == 200:
-            return response.content  # Return image bytes if successful
+    try:
+        response_json = response.json()
+        # print(response_json)  # Débogage
+
+        # Vérification du champ 'choices'
+        if 'choices' in response_json and response_json['choices']:
+            return response_json['choices'][0]['message']['content']
         else:
-            raise Exception(f"Failed to generate image: {response.status_code}, {response.text}")
+            raise Exception("Réponse invalide: 'choices' manquant ou vide.")
+    except ValueError:
+        raise Exception("La réponse n'est pas un JSON valide. Vérifiez le format de l'API.")
+
+
+async def generateSceneImage(prompt: str, inputImagesBase64: list) -> str:
+    # Décoder et sauvegarder chaque image temporairement
+    image_files = []
+    try:
+        for i, inputImageBase64 in enumerate(inputImagesBase64):
+            image_data = base64.b64decode(inputImageBase64)
+            image_file = io.BytesIO(image_data)
+            file_name = f"temp_input_{uuid.uuid4()}.webp"
+            
+            # Sauvegarde de l'image temporaire
+            with open(file_name, "wb") as f:
+                f.write(image_data)
+            
+            image_files.append(file_name)
+            print(f"Image {i+1} décodée et sauvegardée temporairement sous : {file_name}")
     except Exception as e:
-        raise Exception(f"Error occurred during image generation: {str(e)}")
+        print(f"Erreur lors du décodage de l'image base64 : {e}")
+        return None
+    
+    # Connexion à Runware
+    runware = Runware(api_key=runware_api_key)
+    await runware.connect()
+    print("connet")
 
-
-   
-    transcription = client.audio.transcriptions.create(
-        model="whisper-1", 
-        file=audio_file
+    # Préparation de la requête pour générer l'image avec plusieurs images d'entrée
+    request_image = IPhotoMaker(
+        positivePrompt=prompt,
+        steps=35,
+        numberResults=1,
+        height=512,
+        width=512,
+        model="civitai:101055@128078",
+        style="Cinematic",
+        strength=40,
+        outputFormat="WEBP",
+        includeCost=True,
+        taskUUID=str(uuid.uuid4()),
+        inputImages=image_files,  # Utilise la liste des fichiers temporaires
     )
-    return transcription.text
 
-# def get_llm_response(prompt):
-#     response = client.chat.completions.create(
-#     model="gpt-4",
-#     messages=[
-#         {"role": "system", "content": "You are an IEP Advocate."},
-#         {"role": "user", "content": prompt}
-#     ]
-#     )
-#     response_json = response.json()
-    
-#     # Extract the answer from the 'choices' field
-#     if 'choices' in response_json and len(response_json['choices']) > 0:
-#         print( response_json['choices'][0]['message']['content'])
-#         return response_json['choices'][0]['message']['content']
-#     else:
-#         raise Exception("No answer found in the OpenAI response.")
+    try:
+        photos = await runware.photoMaker(requestPhotoMaker=request_image)
 
+        async with aiohttp.ClientSession() as session:
+            for photo in photos:
+                image_url = photo.imageURL
 
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content":prompt
-            }
-        ],
-        "max_tokens": 300
-    }
-    
-    response = requests.post(OPENAI_API_URL, headers=openai_headers, json=payload)
-    response_json = response.json()
-    
-    # Extract the answer from the 'choices' field
-    if 'choices' in response_json and len(response_json['choices']) > 0:
-        return response_json['choices'][0]['message']['content']
-    else:
-        raise Exception("No answer found in the OpenAI response.")
+                # Télécharger et sauvegarder l'image générée
+                async with session.get(image_url) as response:
+                    if response.status == 200:
+                        image_data = await response.read()
+                        generated_image_file_name = f"scene_{uuid.uuid4()}.webp"
+                        with open(generated_image_file_name, "wb") as file:
+                            file.write(image_data)
+                        print(f"Image générée enregistrée sous : {generated_image_file_name}")
+                        result={
+                            "image_url": image_url,
+                            "generated_image_file_name": generated_image_file_name
+                            }
+                        print("result", result)
+                        return result  # Retourner le chemin de l'image générée
+                    else:
+                        print(f"Erreur lors du téléchargement de l'image : {response.status}")
+                        result={
+                            'image_url': image_url,
+                            'generated_image_file_name': None
+                    }
+                        return result
 
-
-    # Assurez-vous que 'client' est bien une instance valide de votre client OpenAI
-    payload = {
-        "model":"gpt-4o-mini",  # Utilisez le modèle correct (gpt-4 ou gpt-3.5-turbo)
-        "messages":[
-            {"role": "system", "content": "You are an IEP Advocate."},
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": 300
-    }
-    response = requests.post(OPENAI_API_URL, headers=openai_headers, json=payload)
-    response_json = response.json()
-    
-    if 'choices' in response_json and len(response_json['choices']) > 0:
-        return response_json['choices'][0]['message']['content']
-    else:
-        raise Exception("No answer found in the OpenAI response.")
+    except Exception as e:
+        print(f"Erreur lors de la génération de l'image : {e}")
+        return None  # Retourne None si une erreur se produit
