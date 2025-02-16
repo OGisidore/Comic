@@ -192,6 +192,7 @@ class CreateComics(APIView):
     async def _post(self, request, *args, **kwargs):
         try:
             data = request.data
+            print(data)
 
             # Validation des champs requis
             if not data.get('title') or not data.get('genre'):
