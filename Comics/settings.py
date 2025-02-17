@@ -36,7 +36,7 @@ SECRET_KEY = 'django-insecure-66h#mgl#yll-^^#faxbi((p6*-mh(e!)wql&=d+0950tg7f8b-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 PORT = os.getenv("PORT",8080)
-ALLOWED_HOSTS = [ "localhost","127.0.0.1","[::1]","comicme.netlify.app"]
+ALLOWED_HOSTS = [ "comicme.netlify.app","localhost","127.0.0.1","[::1]"]
 
 
 CORS_ALLOW_CREDENTIALS = True
