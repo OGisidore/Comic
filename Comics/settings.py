@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+from corsheaders.defaults import default_headers
 import os
 from dotenv import load_dotenv
 from datetime import timedelta
@@ -36,7 +37,7 @@ SECRET_KEY = 'django-insecure-66h#mgl#yll-^^#faxbi((p6*-mh(e!)wql&=d+0950tg7f8b-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 PORT = os.getenv("PORT",8080)
-ALLOWED_HOSTS = [" https://comicme.netlify.app", "comicme.netlify.app","localhost","127.0.0.1","[::1]"]
+ALLOWED_HOSTS = ["comicme.netlify.app", "localhost", "127.0.0.1", "[::1]"]
 
 
 CORS_ALLOW_CREDENTIALS = True
@@ -52,7 +53,7 @@ CORS_ALLOWED_ORIGINS = [
 # CORS_ALLOW_ALL_ORIGINS = True
 
 
-CORS_ALLOW_HEADERS = [
+CORS_ALLOW_HEADERS = list(default_headers) + [
     'content-type',
     'authorization',
     'credentials',
@@ -79,16 +80,16 @@ INSTALLED_APPS = [
     'comics_app',
 ]
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
